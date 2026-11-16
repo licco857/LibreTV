@@ -169,6 +169,8 @@ function addVersionInfoToFooter() {
 
 // 在页脚显示版本元素的辅助函数
 function displayVersionElement(element) {
+    // 已禁用版本信息显示（包括"版本: 检测失败"）
+    return;
     // 获取页脚元素
     const footerElement = document.querySelector('.footer p.text-gray-500.text-sm');
     if (footerElement) {
