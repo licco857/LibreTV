@@ -89,29 +89,15 @@ export async function onRequest(context) {
         // 使用 SHA-256 哈希算法（与其他平台保持一致）
         // 在 Cloudflare Workers 中使用 crypto.subtle
         try {
-            // 支持明文密码和预哈希密码两种模式
-            let computedHash;
-            try {
-                if (serverPassword.length === 64 && /^[0-9a-f]{64}$/.test(serverPassword)) {
-                    // 已经是SHA-256哈希格式，直接使用
-                    computedHash = serverPassword;
-                } else {
-                    // 明文密码，现场计算SHA-256
-                    const encoder = new TextEncoder();
-                    const data = encoder.encode(serverPassword);
-                    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-                    const hashArray = Array.from(new Uint8Array(hashBuffer));
-                    computedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-                }
-            } catch (error) {
-                console.error('生成密码哈希失败:', error);
-                return false;
-            }
- 
-            if (!authHash || authHash !== computedHash) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(serverPassword);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const serverPasswordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            if (!authHash || authHash !== serverPasswordHash) {
                 console.warn('代理请求鉴权失败：密码哈希不匹配');
                 return false;
-            }
             }
         } catch (error) {
             console.error('计算密码哈希失败:', error);
