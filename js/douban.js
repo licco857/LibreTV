@@ -454,25 +454,46 @@ function renderRecommend(tag, pageLimit, pageStart) {
 
 async function fetchDoubanData(url) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const baseHeaders = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Referer': 'https://movie.douban.com/',
         'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
     };
 
-    // Strategy 1: Direct request (Douban allows basic API access without auth)
+    // Strategy 0: Try /proxy/ FIRST (it adds CORS headers even on 401)
+    // When /proxy/ returns 200 with JSON -> success!
+    // When /proxy/ returns 401 -> proxy exists but needs password, fall through
+    try {
+        clearTimeout(timeoutId);
+        const ctrl0 = new AbortController();
+        const t0 = setTimeout(() => ctrl0.abort(), 8000);
+        const proxyUrl = PROXY_URL + encodeURIComponent(url);
+        const resp0 = await fetch(proxyUrl, { signal: ctrl0.signal, headers: baseHeaders });
+        clearTimeout(t0);
+        if (resp0.ok && resp0.headers.get('content-type')?.includes('json')) {
+            const data = await resp0.json();
+            if (data && data.subjects) return data;
+        }
+        // If we got here: either 401 (no auth) or non-JSON -> continue to next strategy
+    } catch (_) {}
+
+    // Strategy 1: Direct request (works when browser can reach Douban)
     try {
         clearTimeout(timeoutId);
         const ctrl1 = new AbortController();
         const t1 = setTimeout(() => ctrl1.abort(), 10000);
         const resp1 = await fetch(url, { signal: ctrl1.signal, headers: baseHeaders });
         clearTimeout(t1);
-        if (resp1.ok) return await resp1.json();
+        if (resp1.ok) {
+            const data = await resp1.json();
+            if (data && data.subjects) return data;
+        }
     } catch (_) {}
 
-    // Strategy 2: Try proxy (if user has password configured)
+    // Strategy 2: Proxy with auth (requires PASSWORD env var + localStorage)
     try {
         let proxiedUrl;
         if (window.ProxyAuth && window.ProxyAuth.addAuthToProxyUrl) {
@@ -485,22 +506,28 @@ async function fetchDoubanData(url) {
         const t2 = setTimeout(() => ctrl2.abort(), 10000);
         const resp2 = await fetch(proxiedUrl, { signal: ctrl2.signal, headers: baseHeaders });
         clearTimeout(t2);
-        if (resp2.ok) return await resp2.json();
+        if (resp2.ok) {
+            const data = await resp2.json();
+            if (data && data.subjects) return data;
+        }
     } catch (_) {}
 
-    // Strategy 3: allorigins fallback
+    // Strategy 3: allorigins fallback (often unreliable)
     try {
         clearTimeout(timeoutId);
         const ctrl3 = new AbortController();
-        const t3 = setTimeout(() => ctrl3.abort(), 10000);
+        const t3 = setTimeout(() => ctrl3.abort(), 5000);
         const origResp = await fetch(
-            `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
             { signal: ctrl3.signal }
         );
         clearTimeout(t3);
         if (origResp.ok) {
             const data = await origResp.json();
-            if (data && data.contents) return JSON.parse(data.contents);
+            if (data && data.contents) {
+                const parsed = JSON.parse(data.contents);
+                if (parsed && parsed.subjects) return parsed;
+            }
         }
     } catch (_) {}
 
