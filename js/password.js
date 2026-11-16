@@ -9,7 +9,7 @@ function isPasswordProtected() {
     const pwd = window.__ENV__ && window.__ENV__.PASSWORD;
     
     // 检查普通密码是否有效
-    return typeof pwd === 'string' && pwd.length === 64 && !/^0+$/.test(pwd);
+    return typeof pwd === 'string' && pwd.length > 0 && !/^0+$/.test(pwd);
 }
 
 /**
