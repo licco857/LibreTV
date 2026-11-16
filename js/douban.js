@@ -464,8 +464,6 @@ async function fetchDoubanData(url) {
     };
 
     // Strategy 0: Try /proxy/ FIRST (it adds CORS headers even on 401)
-    // When /proxy/ returns 200 with JSON -> success!
-    // When /proxy/ returns 401 -> proxy exists but needs password, fall through
     try {
         clearTimeout(timeoutId);
         const ctrl0 = new AbortController();
@@ -473,14 +471,15 @@ async function fetchDoubanData(url) {
         const proxyUrl = PROXY_URL + encodeURIComponent(url);
         const resp0 = await fetch(proxyUrl, { signal: ctrl0.signal, headers: baseHeaders });
         clearTimeout(t0);
+        // /proxy/ returns 401 with JSON+CORS when no password set -> valid response for us
         if (resp0.ok && resp0.headers.get('content-type')?.includes('json')) {
             const data = await resp0.json();
             if (data && data.subjects) return data;
         }
-        // If we got here: either 401 (no auth) or non-JSON -> continue to next strategy
+        // If 401 or non-JSON: fall through to other strategies
     } catch (_) {}
 
-    // Strategy 1: Direct request (works when browser can reach Douban)
+    // Strategy 1: Direct request (works when browser can reach Douban directly)
     try {
         clearTimeout(timeoutId);
         const ctrl1 = new AbortController();
@@ -493,7 +492,7 @@ async function fetchDoubanData(url) {
         }
     } catch (_) {}
 
-    // Strategy 2: Proxy with auth (requires PASSWORD env var + localStorage)
+    // Strategy 2: Proxy with auth (requires PASSWORD env var configured)
     try {
         let proxiedUrl;
         if (window.ProxyAuth && window.ProxyAuth.addAuthToProxyUrl) {
@@ -512,7 +511,7 @@ async function fetchDoubanData(url) {
         }
     } catch (_) {}
 
-    // Strategy 3: allorigins fallback (often unreliable)
+    // Strategy 3: allorigins fallback (often unreliable/slow)
     try {
         clearTimeout(timeoutId);
         const ctrl3 = new AbortController();
