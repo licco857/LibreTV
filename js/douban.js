@@ -454,7 +454,7 @@ function renderRecommend(tag, pageLimit, pageStart) {
 
 async function fetchDoubanData(url) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const baseHeaders = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -463,27 +463,11 @@ async function fetchDoubanData(url) {
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
     };
 
-    // Strategy 0: Try /proxy/ FIRST (it adds CORS headers even on 401)
-    try {
-        clearTimeout(timeoutId);
-        const ctrl0 = new AbortController();
-        const t0 = setTimeout(() => ctrl0.abort(), 8000);
-        const proxyUrl = PROXY_URL + encodeURIComponent(url);
-        const resp0 = await fetch(proxyUrl, { signal: ctrl0.signal, headers: baseHeaders });
-        clearTimeout(t0);
-        // /proxy/ returns 401 with JSON+CORS when no password set -> valid response for us
-        if (resp0.ok && resp0.headers.get('content-type')?.includes('json')) {
-            const data = await resp0.json();
-            if (data && data.subjects) return data;
-        }
-        // If 401 or non-JSON: fall through to other strategies
-    } catch (_) {}
-
-    // Strategy 1: Direct request (works when browser can reach Douban directly)
+    // Strategy 1: Direct request (PRIORITY - fastest when browser can reach Douban directly)
     try {
         clearTimeout(timeoutId);
         const ctrl1 = new AbortController();
-        const t1 = setTimeout(() => ctrl1.abort(), 10000);
+        const t1 = setTimeout(() => ctrl1.abort(), 12000);
         const resp1 = await fetch(url, { signal: ctrl1.signal, headers: baseHeaders });
         clearTimeout(t1);
         if (resp1.ok) {
@@ -492,17 +476,31 @@ async function fetchDoubanData(url) {
         }
     } catch (_) {}
 
+    // Strategy 0: Try /proxy/ (adds CORS headers for browsers blocked from Douban)
+    try {
+        clearTimeout(timeoutId);
+        const ctrl0 = new AbortController();
+        const t0 = setTimeout(() => ctrl0.abort(), 10000);
+        const proxyUrl = PROXY_URL + encodeURIComponent(url);
+        const resp0 = await fetch(proxyUrl, { signal: ctrl0.signal, headers: baseHeaders });
+        clearTimeout(t0);
+        if (resp0.ok && resp0.headers.get('content-type')?.includes('json')) {
+            const data = await resp0.json();
+            if (data && data.subjects) return data;
+        }
+    } catch (_) {}
+
     // Strategy 2: Proxy with auth (requires PASSWORD env var configured)
     try {
+        clearTimeout(timeoutId);
+        const ctrl2 = new AbortController();
+        const t2 = setTimeout(() => ctrl2.abort(), 10000);
         let proxiedUrl;
         if (window.ProxyAuth && window.ProxyAuth.addAuthToProxyUrl) {
             proxiedUrl = await window.ProxyAuth.addAuthToProxyUrl(PROXY_URL + encodeURIComponent(url));
         } else {
             proxiedUrl = PROXY_URL + encodeURIComponent(url);
         }
-        clearTimeout(timeoutId);
-        const ctrl2 = new AbortController();
-        const t2 = setTimeout(() => ctrl2.abort(), 10000);
         const resp2 = await fetch(proxiedUrl, { signal: ctrl2.signal, headers: baseHeaders });
         clearTimeout(t2);
         if (resp2.ok) {
@@ -530,7 +528,8 @@ async function fetchDoubanData(url) {
         }
     } catch (_) {}
 
-    throw new Error('All requests failed');
+    controller.abort();
+    throw new Error('所有获取豆瓣数据的方式均失败');
 }
 
 // 抽取渲染豆瓣卡片的逻辑到单独函数
