@@ -453,61 +453,58 @@ function renderRecommend(tag, pageLimit, pageStart) {
 }
 
 async function fetchDoubanData(url) {
-    // 添加超时控制
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
-    
-    // 设置请求选项，包括信号和头部
-    const fetchOptions = {
-        signal: controller.signal,
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Referer': 'https://movie.douban.com/',
-            'Accept': 'application/json, text/plain, */*',
-        }
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const baseHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Referer': 'https://movie.douban.com/',
+        'Accept': 'application/json, text/plain, */*',
     };
 
+    // Strategy 1: Direct request (Douban allows basic API access without auth)
     try {
-        // 添加鉴权参数到代理URL
-        const proxiedUrl = await window.ProxyAuth?.addAuthToProxyUrl ? 
-            await window.ProxyAuth.addAuthToProxyUrl(PROXY_URL + encodeURIComponent(url)) :
-            PROXY_URL + encodeURIComponent(url);
-            
-        // 尝试直接访问（豆瓣API可能允许部分CORS请求）
-        const response = await fetch(proxiedUrl, fetchOptions);
         clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+        const ctrl1 = new AbortController();
+        const t1 = setTimeout(() => ctrl1.abort(), 10000);
+        const resp1 = await fetch(url, { signal: ctrl1.signal, headers: baseHeaders });
+        clearTimeout(t1);
+        if (resp1.ok) return await resp1.json();
+    } catch (_) {}
+
+    // Strategy 2: Try proxy (if user has password configured)
+    try {
+        let proxiedUrl;
+        if (window.ProxyAuth && window.ProxyAuth.addAuthToProxyUrl) {
+            proxiedUrl = await window.ProxyAuth.addAuthToProxyUrl(PROXY_URL + encodeURIComponent(url));
+        } else {
+            proxiedUrl = PROXY_URL + encodeURIComponent(url);
         }
-        
-        return await response.json();
-    } catch (err) {
-        console.error("豆瓣 API 请求失败（直接代理）：", err);
-        
-        // 失败后尝试备用方法：作为备选
-        const fallbackUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-        
-        try {
-            const fallbackResponse = await fetch(fallbackUrl);
-            
-            if (!fallbackResponse.ok) {
-                throw new Error(`备用API请求失败! 状态: ${fallbackResponse.status}`);
-            }
-            
-            const data = await fallbackResponse.json();
-            
-            // 解析原始内容
-            if (data && data.contents) {
-                return JSON.parse(data.contents);
-            } else {
-                throw new Error("无法获取有效数据");
-            }
-        } catch (fallbackErr) {
-            console.error("豆瓣 API 备用请求也失败：", fallbackErr);
-            throw fallbackErr; // 向上抛出错误，让调用者处理
+        clearTimeout(timeoutId);
+        const ctrl2 = new AbortController();
+        const t2 = setTimeout(() => ctrl2.abort(), 10000);
+        const resp2 = await fetch(proxiedUrl, { signal: ctrl2.signal, headers: baseHeaders });
+        clearTimeout(t2);
+        if (resp2.ok) return await resp2.json();
+    } catch (_) {}
+
+    // Strategy 3: allorigins fallback
+    try {
+        clearTimeout(timeoutId);
+        const ctrl3 = new AbortController();
+        const t3 = setTimeout(() => ctrl3.abort(), 10000);
+        const origResp = await fetch(
+            `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+            { signal: ctrl3.signal }
+        );
+        clearTimeout(t3);
+        if (origResp.ok) {
+            const data = await origResp.json();
+            if (data && data.contents) return JSON.parse(data.contents);
         }
-    }
+    } catch (_) {}
+
+    throw new Error('All requests failed');
 }
 
 // 抽取渲染豆瓣卡片的逻辑到单独函数
@@ -544,7 +541,7 @@ function renderDoubanCards(data, container) {
             const originalCoverUrl = item.cover;
             
             // 2. 也准备代理URL作为备选
-            // Dynamic auth-aware image fallback handled by window.loadDoubanImage
+            // Dynamic auth-aware image fallback handled by window.loadDoubanImage (see loadDoubanImage helper above)
             
             // 为不同设备优化卡片布局
             card.innerHTML = `
