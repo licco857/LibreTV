@@ -1,4 +1,15 @@
 // 豆瓣热门电影电视剧推荐功能
+// Global image lazy-load helper using ProxyAuth for authenticated proxy URLs
+window.loadDoubanImage = function(imgEl, originalUrl) {
+    imgEl.onerror = null;
+    if (window.ProxyAuth && window.ProxyAuth.addAuthToProxyUrl) {
+        window.ProxyAuth.addAuthToProxyUrl(PROXY_URL + encodeURIComponent(originalUrl))
+            .then(function(authUrl) { imgEl.src = authUrl; })
+            .catch(function() { imgEl.style.display = 'none'; });
+    } else {
+        imgEl.src = PROXY_URL + encodeURIComponent(originalUrl);
+    }
+};
 
 // 豆瓣标签列表 - 修改为默认标签
 let defaultMovieTags = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动作', '喜剧', '日综', '爱情', '科幻', '悬疑', '恐怖', '治愈'];
@@ -533,14 +544,14 @@ function renderDoubanCards(data, container) {
             const originalCoverUrl = item.cover;
             
             // 2. 也准备代理URL作为备选
-            const proxiedCoverUrl = PROXY_URL + encodeURIComponent(originalCoverUrl);
+            // Dynamic auth-aware image fallback handled by window.loadDoubanImage
             
             // 为不同设备优化卡片布局
             card.innerHTML = `
                 <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
                     <img src="${originalCoverUrl}" alt="${safeTitle}" 
                         class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onerror="this.onerror=null; this.src='${proxiedCoverUrl}'; this.classList.add('object-contain');"
+                        onerror="window.loadDoubanImage(this,'originalCoverUrl')"
                         loading="lazy" referrerpolicy="no-referrer">
                     <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
                     <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
