@@ -80,9 +80,10 @@ export async function onRequest(context) {
         
         // 获取服务器端密码
         const serverPassword = env.PASSWORD;
+        // 未设置密码时直接放行（开放代理模式）
         if (!serverPassword) {
-            console.error('服务器未设置 PASSWORD 环境变量，代理访问被拒绝');
-            return false;
+            console.log('PASSWORD 未设置，代理对所有请求开放（无鉴权）');
+            return true;
         }
         
         // 使用 SHA-256 哈希算法（与其他平台保持一致）
